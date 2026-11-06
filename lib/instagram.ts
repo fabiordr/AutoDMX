@@ -108,13 +108,21 @@ async function buildFinalMessage(automation: InstagramAutomation): Promise<strin
 
 /**
  * Verifies follow status of the user using the Instagram profile API.
+ *
+ * Returns true (confirmed following), false (confirmed NOT following) or
+ * null (could not verify). Fork fix (2026-11-06): the upstream code failed
+ * OPEN on any API error or missing field, so with the Facebook Graph
+ * endpoint (where `follows_business` is often unavailable for the
+ * commenter's id) the gate never fired and the link went out directly.
+ * Callers fail CLOSED on null at the gate (prompt first) and trust the
+ * user's "I followed!" tap when a recheck is still inconclusive.
  */
 async function checkFollowStatus(
   senderId: string,
   accessToken: string,
   contactId: string,
   automationId: string
-): Promise<boolean> {
+): Promise<boolean | null> {
   try {
     console.log(`[Meta API] Checking follow status for IGSID: ${senderId}`);
     const profileRes = await fetchWithBackoff(
@@ -129,24 +137,24 @@ async function checkFollowStatus(
         contact_id: contactId,
         automation_id: automationId,
         direction: 'out',
-        content: `Follow check passed (failed open on error: ${profileData.error.message})`,
+        content: `Follow check unknown (error: ${profileData.error.message})`,
         status: 'follow_passed',
       });
-      return true; // Fail open
+      return null; // Unknown — callers fail closed at the gate
     }
 
     if (profileData.follows_business === undefined) {
       console.warn(
-        `[Meta API Warning] 'follows_business' field is missing or unavailable. Meta may have deprecated it or client permissions are insufficient. Defaulting to 'true' (fail open).`
+        `[Meta API Warning] 'follows_business' field is missing or unavailable. Meta may have deprecated it or client permissions are insufficient. Returning unknown.`
       );
       await supabase.from('message_log').insert({
         contact_id: contactId,
         automation_id: automationId,
         direction: 'out',
-        content: 'Follow check passed (failed open due to missing field)',
+        content: 'Follow check unknown (missing field)',
         status: 'follow_passed',
       });
-      return true; // Fail open
+      return null; // Unknown — callers fail closed at the gate
     }
 
     const isFollowing = !!profileData.follows_business;
@@ -165,10 +173,10 @@ async function checkFollowStatus(
       contact_id: contactId,
       automation_id: automationId,
       direction: 'out',
-      content: `Follow check passed (failed open on exception: ${errorMsg})`,
+      content: `Follow check unknown (exception: ${errorMsg})`,
       status: 'follow_passed',
     });
-    return true; // Fail open
+    return null; // Unknown — callers fail closed at the gate
   }
 }
 
@@ -604,8 +612,10 @@ export async function handleMessageEvent(
       pendingFollowStates[0].automations!.id
     );
 
-    if (isFollowingNow) {
-      // User is following — deliver every pending automation's link in sequence
+    if (isFollowingNow !== false) {
+      // User is following (or the check was inconclusive after they tapped
+      // "I followed!" — trust the tap). Deliver every pending automation's
+      // link in sequence.
       console.log(`[Instagram Webhook DM] User is following. Sending links for ${pendingFollowStates.length} automation(s).`);
       for (const state of pendingFollowStates) {
         const automation = state.automations!;
