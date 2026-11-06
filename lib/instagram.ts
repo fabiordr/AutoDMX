@@ -402,15 +402,15 @@ export async function handleCommentTrigger(
       } else {
         // Not a follower — ask them to follow first
         console.log(`[Instagram Trigger] User is not following. Sending follow prompt.`);
-        let followPrompt = automation.follow_prompt_message || 'Please follow our profile first to get the link!';
+        let followPrompt = automation.follow_prompt_message || 'Segue o perfil primeiro para receber o link!';
         if (account.ig_username) {
-          followPrompt += `\n\n👉 Follow here: https://www.instagram.com/${account.ig_username}`;
+          followPrompt += `\n\n👉 Siga aqui: https://www.instagram.com/${account.ig_username}`;
         }
         messageText = followPrompt;
         quickReplies = [
           {
             content_type: 'text',
-            title: 'I followed!',
+            title: 'Já segui!',
             payload: 'I_FOLLOWED',
           },
         ];
@@ -596,6 +596,8 @@ export async function handleMessageEvent(
     const isTapFollowed =
       text.trim().toLowerCase() === 'i followed!' ||
       text.trim().toLowerCase() === 'i followed! ✅' ||
+      text.trim().toLowerCase() === 'já segui!' ||
+      text.trim().toLowerCase() === 'já segui! ✅' ||
       text.trim() === 'I_FOLLOWED';
 
     if (!isTapFollowed) {
@@ -633,14 +635,14 @@ export async function handleMessageEvent(
       console.log(`[Instagram Webhook DM] User is not following. Sending a single re-prompt.`);
       await new Promise((resolve) => setTimeout(resolve, 2000));
       const mostRecentAutomation = pendingFollowStates[0].automations!;
-      let followPrompt = mostRecentAutomation.follow_prompt_message || 'Please follow our profile first to get the link!';
+      let followPrompt = mostRecentAutomation.follow_prompt_message || 'Segue o perfil primeiro para receber o link!';
       if (account.ig_username) {
-        followPrompt += `\n\n👉 Follow here: https://www.instagram.com/${account.ig_username}`;
+        followPrompt += `\n\n👉 Siga aqui: https://www.instagram.com/${account.ig_username}`;
       }
       await sendDmAndLog(followPrompt, mostRecentAutomation.id, [
         {
           content_type: 'text',
-          title: 'I followed! ✅',
+          title: 'Já segui! ✅',
           payload: 'I_FOLLOWED',
         },
       ]);
