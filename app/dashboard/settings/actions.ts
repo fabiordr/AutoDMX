@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { encrypt } from '@/lib/crypto';
 import { createClient } from '@/utils/supabase/server';
+import { resolveInstagramAccount } from '@/lib/meta-graph';
 
 type InstagramMeResponse =
   | {
@@ -46,27 +47,15 @@ export async function refreshInstagramCredentials(formData: FormData) {
     redirectWithError('Instagram account not found.');
   }
 
-  const meUrl = new URL('https://graph.instagram.com/v21.0/me');
-  meUrl.searchParams.set('fields', 'id,username');
-  meUrl.searchParams.set('access_token', token);
-
+  // Verify against the Facebook Graph endpoint (see lib/meta-graph.ts).
+  // System-user tokens answer /me with the system user, so META_IG_USER_ID
+  // pins the Instagram account to verify.
   let meData: InstagramMeResponse = null;
   try {
-    const meRes = await fetch(meUrl, { cache: 'no-store' });
-    meData = (await meRes.json()) as InstagramMeResponse;
+    meData = await resolveInstagramAccount(token, process.env.META_IG_USER_ID);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     redirectWithError(`Could not verify the Instagram token: ${message}`);
-  }
-
-  if (meData?.error) {
-    redirectWithError(
-      `Instagram token rejected: ${meData.error.message || 'Unknown Meta API error.'}`
-    );
-  }
-
-  if (!meData?.id || !meData.username) {
-    redirectWithError('Instagram verification did not return an id and username.');
   }
 
   if (meData.id !== account.ig_user_id) {
@@ -74,6 +63,7 @@ export async function refreshInstagramCredentials(formData: FormData) {
       `The env token belongs to @${meData.username}, but this row is for @${account.ig_username}.`
     );
   }
+
 
   const { error: updateError } = await supabase
     .from('accounts')

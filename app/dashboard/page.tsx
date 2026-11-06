@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/server';
 import { decrypt } from '@/lib/crypto';
 import { initializeAccountIfNeeded } from '@/lib/instagram';
+import { GRAPH_API_BASE_URL } from '@/lib/meta-graph';
 import DashboardGrid from './DashboardGrid';
 import { AppShell } from '../_components/AppShell';
 import { AlertCircle, RefreshCw, KeyRound } from 'lucide-react';
@@ -164,7 +165,7 @@ export default async function Dashboard({
 
   try {
     const mediaRes = await fetch(
-      `https://graph.instagram.com/v21.0/${activeAccount.ig_user_id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${decryptedToken}`,
+      `${GRAPH_API_BASE_URL}/${activeAccount.ig_user_id}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=24&access_token=${decryptedToken}`,
       { cache: 'no-store' }
     );
     const mediaData = await mediaRes.json();

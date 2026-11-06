@@ -1,5 +1,6 @@
 import { encrypt, decrypt } from '@/lib/crypto';
 import { supabase } from '@/lib/supabase';
+import { GRAPH_API_BASE_URL, resolveInstagramAccount } from '@/lib/meta-graph';
 
 interface InstagramComment {
   id: string;
@@ -117,7 +118,7 @@ async function checkFollowStatus(
   try {
     console.log(`[Meta API] Checking follow status for IGSID: ${senderId}`);
     const profileRes = await fetchWithBackoff(
-      `https://graph.instagram.com/v21.0/${senderId}?fields=follows_business&access_token=${accessToken}`,
+      `${GRAPH_API_BASE_URL}/${senderId}?fields=follows_business&access_token=${accessToken}`,
       { method: 'GET' }
     );
     const profileData = await profileRes.json();
@@ -211,7 +212,7 @@ async function sendOrQueueReply(
     }
 
     const dmRes = await fetchWithBackoff(
-      `https://graph.instagram.com/v21.0/${account.ig_user_id}/messages`,
+      `${GRAPH_API_BASE_URL}/${account.ig_user_id}/messages`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -297,7 +298,7 @@ export async function handleCommentTrigger(
       console.log(`[Meta API] Posting public reply variant: "${randomReply}" to comment ${comment.id}`);
       
       const replyRes = await fetchWithBackoff(
-        `https://graph.instagram.com/v21.0/${comment.id}/replies`,
+        `${GRAPH_API_BASE_URL}/${comment.id}/replies`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -544,7 +545,7 @@ export async function handleMessageEvent(
       }
 
       const dmRes = await fetchWithBackoff(
-        `https://graph.instagram.com/v21.0/${account.ig_user_id}/messages`,
+        `${GRAPH_API_BASE_URL}/${account.ig_user_id}/messages`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -667,29 +668,24 @@ export async function initializeAccountIfNeeded(): Promise<{ success: boolean; e
       };
     }
 
-    // Call GET https://graph.instagram.com/v21.0/me?fields=id,username&access_token=...
-    console.log('[Auto-Init] Verifying Instagram access token with graph.instagram.com/v21.0/me...');
-    const meRes = await fetch(
-      `https://graph.instagram.com/v21.0/me?fields=id,username&access_token=${token}`
-    );
-    const meData = await meRes.json();
-
-    if (meData.error) {
-      return {
-        success: false,
-        error: `Instagram API Error: ${meData.error.message}`,
-      };
+    // Verify the token against the Facebook Graph endpoint (see
+    // lib/meta-graph.ts). System-user tokens answer /me with the system
+    // user, so META_IG_USER_ID pins the Instagram account to verify.
+    console.log('[Auto-Init] Verifying Instagram access token...');
+    let igUserId: string;
+    let igUsername: string;
+    try {
+      const resolved = await resolveInstagramAccount(
+        token,
+        process.env.META_IG_USER_ID
+      );
+      igUserId = resolved.id;
+      igUsername = resolved.username;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: msg };
     }
 
-    const igUserId = meData.id;
-    const igUsername = meData.username;
-
-    if (!igUserId || !igUsername) {
-      return {
-        success: false,
-        error: 'Instagram verification response was missing user id or username.',
-      };
-    }
 
     // Encrypt credentials
     const encryptedToken = encrypt(token);

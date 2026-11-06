@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { decrypt } from '@/lib/crypto';
+import { GRAPH_API_BASE_URL } from '@/lib/meta-graph';
 
 interface QueueItem {
   id: string;
@@ -152,7 +153,7 @@ async function handleCron(request: NextRequest) {
       // 3. Post private reply to Instagram Graph API
       console.log(`[Cron Drain] Dispatching DM reply to comment ${commentId} for contact ${item.contact_id}`);
       const dmRes = await fetchWithBackoff(
-        `https://graph.instagram.com/v21.0/${account.ig_user_id}/messages`,
+        `${GRAPH_API_BASE_URL}/${account.ig_user_id}/messages`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
